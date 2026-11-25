@@ -95,6 +95,8 @@ button{font-family:inherit}
 .actions .hint{min-height:52px;padding:0 14px;border-radius:14px;border:1px solid var(--line);background:#241A11;color:var(--gold2);display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;cursor:pointer}
 .actions .go{flex:1;min-height:52px;border-radius:14px;background:var(--gold);color:#1B130B;border:0;font-family:'Cinzel',serif;font-weight:700;font-size:16px;cursor:pointer}
 .note{margin:0;font-size:12px;text-align:center;color:#A8977A}
+.listen{margin-left:auto;margin-right:10px;height:44px;padding:0 16px;border-radius:22px;border:1px solid var(--line);background:#241A11;color:var(--gold2);cursor:pointer;font:600 14px/1 inherit;flex:none}
+.listen[aria-pressed=true]{background:var(--gold);color:#241A11}
 .x{width:44px;height:44px;border-radius:22px;border:1px solid var(--line);background:#241A11;color:var(--gold2);cursor:pointer;font-size:18px;flex:none}
 .shake{animation:shake .35s}
 @keyframes shake{25%{transform:translateX(-6px)}50%{transform:translateX(6px)}75%{transform:translateX(-3px)}}
@@ -203,7 +205,7 @@ button{font-family:inherit}
 <!-- Scheda enigma -->
 <div class="ov" id="ovPuzzle" role="dialog" aria-modal="true" aria-labelledby="pTitle">
   <div class="sheet" id="sheet">
-    <div class="top"><span class="kicker" id="pKick" style="text-align:left">Enigma</span><button class="x" id="pClose" aria-label="Chiudi l'enigma">✕</button></div>
+    <div class="top"><span class="kicker" id="pKick" style="text-align:left">Enigma</span><button class="listen" id="pListen" aria-pressed="false" aria-label="Ascolta l'introduzione">▶ Ascolta</button><button class="x" id="pClose" aria-label="Chiudi l'enigma">✕</button></div>
     <div><h2 id="pTitle"></h2><p class="sub" id="pPlace"></p></div>
     <p class="story" id="pStory"></p>
     <div class="card" id="pCard">

@@ -1016,16 +1016,30 @@ function bleat() {
 }
 function windTo(gain, freq, sec) { if (!AC) return; const t = AC.currentTime; windGain.gain.setValueAtTime(windGain.gain.value, t); windFilter.frequency.setValueAtTime(windFilter.frequency.value, t); windGain.gain.linearRampToValueAtTime(gain, t + sec); windFilter.frequency.linearRampToValueAtTime(freq, t + sec); }
 
+/* ---------- voce narrante (file in audio/voce) ---------- */
+const VOICE = { el: new Audio(), queue: [], cur: null };
+VOICE.el.preload = 'none';
+function voicePlay(name, { queue = false } = {}) {
+  if (!audioOn) return;
+  if (queue && !VOICE.el.paused && !VOICE.el.ended) { VOICE.queue.push(name); return; }
+  VOICE.queue.length = 0; VOICE.cur = name; VOICE.el.src = `audio/voce/${name}.mp3`;
+  VOICE.el.play().catch(() => {}); listenUI();
+}
+function voiceStop() { VOICE.queue.length = 0; VOICE.cur = null; VOICE.el.pause(); listenUI(); }
+VOICE.el.addEventListener('ended', () => { const n = VOICE.queue.shift(); if (n) { VOICE.cur = n; VOICE.el.src = `audio/voce/${n}.mp3`; VOICE.el.play().catch(() => {}); } else VOICE.cur = null; listenUI(); });
+function listenUI() { const b = $('pListen'); if (!b) return; const on = !!VOICE.cur && !VOICE.el.paused; b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '■ Ferma' : '▶ Ascolta'; }
+VOICE.el.addEventListener('pause', listenUI); VOICE.el.addEventListener('play', listenUI);
+
 /* =====================================================================
    SCHERMATE
    ===================================================================== */
 function openOv(id) { $(id).classList.add('open'); tip.style.display = 'none'; P.keys = {}; }
-function closeOv(id) { $(id).classList.remove('open'); canvas.focus(); }
+function closeOv(id) { $(id).classList.remove('open'); if (id === 'ovPuzzle') voiceStop(); canvas.focus(); }
 function closeTopOverlay() { for (const id of ['ovMap', 'ovScroll', 'ovHelp', 'ovPuzzle']) if ($(id).classList.contains('open')) { if (id === 'ovHelp' && !running) return; closeOv(id); return; } }
 
 let curP = null, curCheck = null;
 function openPuzzle(p) {
-  curP = p;
+  curP = p; voiceStop();
   $('pKick').textContent = `Enigma ${p.n} di 12`;
   $('pTitle').textContent = p.title; $('pPlace').textContent = p.place; $('pStory').textContent = p.story;
   $('pTag').textContent = `ENIGMA ${p.n}`; $('pRef').textContent = p.ref; $('pPrompt').textContent = p.prompt;
@@ -1125,7 +1139,8 @@ function openMap() {
 $('bMap').addEventListener('click', openMap);
 $('mClose').addEventListener('click', () => closeOv('ovMap'));
 
-$('bAudio').addEventListener('click', () => { audioOn = !audioOn; $('bAudio').setAttribute('aria-pressed', String(audioOn)); $('bAudio').setAttribute('aria-label', audioOn ? 'Audio attivo' : 'Audio disattivato'); if (master) master.gain.value = audioOn ? .6 : 0; });
+$('pListen').addEventListener('click', () => { if (VOICE.cur && !VOICE.el.paused) voiceStop(); else if (curP) voicePlay(`enigma_${String(curP.n).padStart(2, '0')}`); });
+$('bAudio').addEventListener('click', () => { audioOn = !audioOn; if (!audioOn) voiceStop(); $('bAudio').setAttribute('aria-pressed', String(audioOn)); $('bAudio').setAttribute('aria-label', audioOn ? 'Audio attivo' : 'Audio disattivato'); if (master) master.gain.value = audioOn ? .6 : 0; });
 $('bHelp').addEventListener('click', () => openOv('ovHelp'));
 $('bHow').addEventListener('click', () => openOv('ovHelp'));
 $('bHelpOk').addEventListener('click', () => closeOv('ovHelp'));
@@ -1184,7 +1199,7 @@ function startFinale() {
 }
 function stepFinale(dt) {
   const F = finale; F.t += dt; const t = F.t;
-  if (F.capI < CAPS.length && t >= CAPS[F.capI][0]) { cap(CAPS[F.capI][1], CAPS[F.capI][2], 6400); F.capI++; }
+  if (F.capI < CAPS.length && t >= CAPS[F.capI][0]) { cap(CAPS[F.capI][1], CAPS[F.capI][2], 6400); voicePlay(`finale_${F.capI + 1}`, { queue: true }); F.capI++; }
   if (t > 27) F.phase = 'dawn';
   // la colonna passa dietro al popolo e diventa fuoco
   const pm = smooth(0, 6, t); pillar.position.set(118 + (96 - 118) * pm, 0, -12 + 12 * pm); fireK = t > 27 ? Math.max(0, 1 - (t - 27) / 4) : 1;
