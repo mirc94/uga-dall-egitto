@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { addWind, rng, shared, texLoader, makeSky, makeGround, makeNile, makeSea, makeMountains, makePalms, makePapyrus, makeTufts, makeStones, heightAt, NILE, SEA_X } from './env.js';
 import { makePerson, fabricTexture, lathe, animatePeople } from './people.js';
 import { loadAnimals, placeAnimals } from './animals.js';
+import { createPost, createPillar, createDust } from './fx.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
@@ -273,6 +274,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog('#d8d3c4', 160, 900);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.08, 6000);
+let POST = null;
 
 const manager = new THREE.LoadingManager();
 manager.onProgress = (u, a, b) => { const lb = $('loadbar'); if (lb) lb.style.width = Math.round(a / b * 100) + '%'; };
@@ -636,18 +638,9 @@ function puffTex(seed) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 const pillar = new THREE.Group(); pillar.position.set(118, 0, -12); scene.add(pillar);
-const cloudSpr = [], fireSpr = [];
-{
-  const r = rng(51), tx = [puffTex(1), puffTex(2), puffTex(3)];
-  for (let i = 0; i < 46; i++) {
-    const y = i * 1.7 + 2, s = 11 + r() * 7 + (i > 36 ? (i - 36) * 2.2 : 0);
-    const c = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx[i % 3], color: new THREE.Color().setHSL(.1, .08, .82 + r() * .14), transparent: true, opacity: .8, depthWrite: false }));
-    c.position.set((r() - .5) * 2.4, y, (r() - .5) * 2.4); c.scale.set(s, s, 1); c.userData = { y, ph: r() * 6, rot: (r() - .5) * .08 }; c.material.rotation = r() * 6; pillar.add(c); cloudSpr.push(c);
-    const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx[(i + 1) % 3], color: new THREE.Color().setHSL(.06 + r() * .05, 1, .55), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-    f.position.copy(c.position); f.scale.set(s * .85, s * .85, 1); f.userData = c.userData; pillar.add(f); fireSpr.push(f);
-  }
-}
-const fireLight = new THREE.PointLight('#ff9a48', 0, 300, 1.1); fireLight.position.set(0, 22, 0); pillar.add(fireLight);
+const PIL = createPillar(scene, glowTex()); scene.remove(PIL.group); pillar.add(PIL.group);
+const fireLight = PIL.light;
+const DUST = createDust(scene, glowTex());
 let fireK = 0;
 
 /* ---------- la folla (istanze) ---------- */
@@ -1287,7 +1280,8 @@ function stepWind(dt) {
 /* =====================================================================
    CICLO
    ===================================================================== */
-function resize() { const w = innerWidth, hh = innerHeight; renderer.setSize(w, hh, false); camera.aspect = w / hh; camera.updateProjectionMatrix(); }
+function resize() { const w = innerWidth, hh = innerHeight; renderer.setSize(w, hh, false); camera.aspect = w / hh; camera.updateProjectionMatrix(); if (POST) POST.setSize(w, hh); }
+POST = createPost(renderer, scene, camera);
 addEventListener('resize', resize); resize();
 const clock = new THREE.Clock(); let nearCheckT = 0, saveT = 0, insideK = 0;
 camera.position.set(-60, 30, 70); camera.lookAt(0, 0, 0);
@@ -1324,13 +1318,8 @@ function loop() {
   pillar.visible = !!showPillar;
   if (pillar.visible) {
     const night = finale ? fireK : (phaseNow() === 'night' ? 1 : 0);
-    for (let i = 0; i < cloudSpr.length; i++) {
-      const c = cloudSpr[i], f = fireSpr[i], u = c.userData;
-      c.position.y = f.position.y = u.y + Math.sin(t * .4 + u.ph) * .6;
-      c.material.rotation += u.rot * dt; f.material.rotation -= u.rot * dt * 1.6;
-      c.material.opacity = .8 * (1 - night); f.material.opacity = (.4 + Math.sin(t * 5 + u.ph) * .08) * night;
-    }
-    fireLight.intensity = 420 * (finale ? fireK : 0);
+    const flick = PIL.update(t, night, sun.position.clone().normalize());
+    fireLight.intensity = 420 * (finale ? fireK : 0) * flick;
   }
   for (const s of stations) if (s.beam.visible) { s.beam.material.opacity = .18 + Math.sin(t * 3) * .08; s.spr.position.y = 2.45 + Math.sin(t * 2) * .08; }
   animatePeople(people, t);
@@ -1339,7 +1328,10 @@ function loop() {
   for (const p of people) p.visible = !!finale || Math.hypot(p.position.x - camera.position.x, p.position.z - camera.position.z) < 110;
   if (animals) for (const m of animals.meshes) if (m.userData.list[0].cross) m.visible = !!(finale || solvedHas(8));
   stepWind(dt);
-  renderer.render(scene, camera);
+  { const ph = finale ? 'night' : phaseNow(), dayK = ph === 'day' ? 1 : ph === 'night' ? 0 : .35;
+    DUST.update(t, camera.position, finale ? 0 : dayK * (1 - insideK), 0);
+    POST.phase(finale ? Math.max(fireK, .6) : 1 - dayK, insideK > .5); }
+  POST.render();
   requestAnimationFrame(loop);
 }
 refreshStations();
