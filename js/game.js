@@ -653,16 +653,30 @@ let fireK = 0;
 /* ---------- la folla (istanze) ---------- */
 // folla: versioni leggere dei personaggi (models/people/c_*.json), circa 250 persone
 const CROWD_VARIANTS = [['c_schiavo1', 1.72], ['c_schiavo2', 1.70], ['c_pastore', 1.74], ['c_capofamiglia', 1.75], ['c_donna', 1.60], ['c_figlio', 1.28], ['c_miriam', 1.56]];
-const crowd = [], crowdMeshes = [];
+const crowd = [], crowdMeshes = []; let CROWD_FAMS = [];
 let crowdMesh = null;   // segnala che la folla è pronta
 {
-  const r = rng(61);
-  for (let i = 0; i < 252; i++) {
-    const side = i % 2 ? 1 : -1; let x, z;
-    x = 94 + r() * 34; z = side * (10 + r() * 20);
-    if (Math.hypot(x - 112, z - 9) < 2.5 || Math.hypot(x - 103, z + 9) < 2.5) z += side * 3;
-    crowd.push({ v: i % CROWD_VARIANTS.length, x0: x, z0: z, x, z, sc: .94 + r() * .12, lane: (r() - .5) * 18, delay: r() * 6 + (Math.abs(z) - 10) * .12, sp: 3.2 + r() * .7, ph: r() * 6, ry0: (side > 0 ? Math.PI : 0) + (r() - .5) * 1.4 });
+  // la folla esce per famiglie: un padre o un capofamiglia, una madre, figli; ogni famiglia cammina vicina
+  const r = rng(61), FAMS = [], MEN = [0, 1, 2, 3], WOMEN = [4, 6], KID = 5;
+  let n = 0;
+  while (n < 252) {
+    const side = FAMS.length % 2 ? 1 : -1, size = Math.min(252 - n, 3 + Math.floor(r() * 4));
+    let cx = 96 + r() * 30, cz = side * (12 + r() * 17);
+    if (Math.hypot(cx - 112, cz - 9) < 3.5 || Math.hypot(cx - 103, cz + 9) < 3.5) cz += side * 4;
+    const fam = { lane: (r() - .5) * 18, delay: r() * 6 + (Math.abs(cz) - 10) * .12, sp: 3.2 + r() * .6, side, members: [] };
+    for (let k = 0; k < size; k++) {
+      const v = k === 0 ? MEN[Math.floor(r() * MEN.length)] : k === 1 ? WOMEN[Math.floor(r() * WOMEN.length)] : (r() < .7 ? KID : MEN[Math.floor(r() * MEN.length)]);
+      // posizione nel gruppo: padre davanti, madre accanto, figli in mezzo o dietro
+      const lat = k === 0 ? -.5 : k === 1 ? .6 : (r() - .5) * 1.6, back = k < 2 ? r() * .4 : .9 + r() * 1.6;
+      const x = cx + (r() - .5) * 2.4, z = cz + (r() - .5) * 2.4;
+      const kid = v === KID;
+      crowd.push({ v, x0: x, z0: z, x, z, sc: kid ? .85 + r() * .25 : .94 + r() * .12, lane: fam.lane + lat, delay: fam.delay + back / fam.sp, sp: fam.sp, ph: r() * 6, kid, fam: FAMS.length,
+        ry0: (side > 0 ? Math.PI : 0) + (r() - .5) * 1.4 });
+      fam.members.push(crowd.length - 1);
+    }
+    FAMS.push(fam); n += size;
   }
+  CROWD_FAMS = FAMS;
   Promise.all(CROWD_VARIANTS.map(([n]) => loadModel(n))).then(gs => {
     gs.forEach((g, vi) => {
       if (!g) return; let mesh = null; g.scene.updateMatrixWorld(true); g.scene.traverse(o => { if (o.isMesh && !mesh) mesh = o; });
@@ -686,14 +700,24 @@ function walkPos(a, t) {
   const s = Math.max(0, t - a.delay) * a.sp, sx = 129, sz = a.lane, d0 = Math.hypot(sx - a.x0, sz - a.z0);
   if (s <= 0) return [a.x0, a.z0, a.ry0, false];
   if (s < d0) { const k = s / d0; return [a.x0 + (sx - a.x0) * k, a.z0 + (sz - a.z0) * k, Math.atan2(sx - a.x0, sz - a.z0), true]; }
-  return [sx + (s - d0), sz, Math.PI / 2, true];
+  const ds = s - d0, dz = Math.sin(ds * .045 + a.ph) * .5;
+  return [sx + ds, sz + dz, Math.PI / 2 + Math.cos(ds * .045 + a.ph) * .02, true];
 }
 function placeCrowd(t, walking) {
   for (let i = 0; i < crowd.length; i++) {
     const a = crowd[i];
     let y = 0, ry = a.ry0;
-    if (walking) { const [x, z, r2, mv] = walkPos(a, t); a.x = x; a.z = z; ry = r2; if (mv) y = Math.abs(Math.sin(t * 6 + a.ph)) * .05; }
-    dummy.position.set(a.x, heightAt(a.x, a.z) + y, a.z); dummy.rotation.set(0, ry, 0); dummy.scale.setScalar(a.sc); dummy.updateMatrix();
+    let lean = 0, roll = 0;
+    if (walking) {
+      const [x, z, r2, mv] = walkPos(a, t); a.x = x; a.z = z; ry = r2;
+      if (mv) {
+        // passo: su e giù a ogni appoggio, lieve dondolio laterale, busto un po' in avanti; i bambini fanno passi più rapidi
+        const ph = t * a.sp / (a.kid ? .9 : 1.3) * Math.PI + a.ph;
+        y = Math.abs(Math.sin(ph)) * (a.kid ? .06 : .045);
+        roll = Math.sin(ph) * .035; lean = .05; ry += Math.sin(ph * .5) * .03;
+      }
+    }
+    dummy.position.set(a.x, heightAt(a.x, a.z) + y, a.z); dummy.rotation.order = 'YXZ'; dummy.rotation.set(lean, ry, roll); dummy.scale.setScalar(a.sc); dummy.updateMatrix();
     if (a.mesh) a.mesh.setMatrixAt(a.j, dummy.matrix);
   }
   for (const m of crowdMeshes) m.instanceMatrix.needsUpdate = true;
@@ -769,8 +793,16 @@ const ANIM = [];
   for (const [x, z] of [[62, 28], [45, -28], [78, 22]]) add('asino', x, z);
   for (let i = 0; i < 3; i++) add('bue', 70 + r() * 6, 30 + r() * 6);
   // greggi che attraverseranno il mare con il popolo
-  for (let i = 0; i < 26; i++) add(r() < .6 ? 'pecora' : 'capra', 96 + r() * 30, (r() < .5 ? 1 : -1) * (36 + r() * 6), Math.PI / 2, { cross: true, lane: (r() - .5) * 14, delay: 3 + r() * 8, sp: 3.2 + r() * .5 });
-  for (let i = 0; i < 4; i++) add(r() < .5 ? 'bue' : 'asino', 100 + r() * 24, (r() < .5 ? 1 : -1) * 38, Math.PI / 2, { cross: true, lane: (r() - .5) * 12, delay: 5 + r() * 6, sp: 3.2 });
+  // le greggi e le mandrie partono con le famiglie (Esodo 12:38): qualche capo dietro a ogni famiglia
+  CROWD_FAMS.forEach((fam, fi) => {
+    if (fi % 2) return;
+    const lead = crowd[fam.members[0]], nA = 1 + Math.floor(r() * 3);
+    for (let q = 0; q < nA; q++) {
+      const big = q === 0 && r() < .22, k = big ? (r() < .5 ? 'bue' : 'asino') : (r() < .6 ? 'pecora' : 'capra');
+      const back = 2.6 + q * 1.1 + r() * .6;
+      add(k, lead.x0 + (r() - .5) * 3, lead.z0 + fam.side * (2 + r() * 2), Math.PI / 2, { cross: true, lane: fam.lane + (r() - .5) * 2.2, delay: fam.delay + back / fam.sp, sp: fam.sp });
+    }
+  });
   for (const a of ANIM) if (!a.cross) { const s = a.k === 'cammello' || a.k === 'bue' || a.k === 'cavallo' ? .9 : .5; col(a.x - s, a.x + s, a.z - s, a.z + s); }
 }
 
