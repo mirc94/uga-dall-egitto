@@ -177,36 +177,79 @@ export function makeSea(scene, T, sunDir) {
   water.rotation.x = -Math.PI / 2; water.position.set(SEA_X + 800, .22, 0); scene.add(water);
   // pareti d'acqua per il finale (Esodo 14:22)
   const n2 = wn.clone(); n2.repeat.set(30, 3); n2.needsUpdate = true;
-  const wallMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: .06, metalness: .0, normalMap: n2, normalScale: new THREE.Vector2(1.3, 1.3), envMapIntensity: 1.6, transparent: true, opacity: .9 });
-  const uTop = { value: 1 };
+  const wallMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: .04, metalness: .0, normalMap: n2, normalScale: new THREE.Vector2(1.1, 1.1), envMapIntensity: 1.9, transparent: true, opacity: .93 });
+  const uTop = { value: 1 }, uWGap = { value: 1 };
+  const NOISE = `
+    float wh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float wn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f); return mix(mix(wh(i), wh(i+vec2(1,0)), f.x), mix(wh(i+vec2(0,1)), wh(i+vec2(1,1)), f.x), f.y); }
+    float wf(vec2 p){ float v = 0., a = .5; for (int i = 0; i < 4; i++) { v += a * wn(p); p = p * 2.03 + 17.1; a *= .5; } return v; }
+`;
   wallMat.onBeforeCompile = sh => {
-    sh.uniforms.uTime = shared.uTime; sh.uniforms.uTop = uTop;
-    sh.vertexShader = 'uniform float uTime;\nvarying float vWY;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    sh.uniforms.uTime = shared.uTime; sh.uniforms.uTop = uTop; sh.uniforms.uGap = uWGap;
+    sh.vertexShader = 'uniform float uTime; uniform float uTop; uniform float uGap;\nvarying vec3 vWP; varying float vSide; varying float vUp; varying float vEnd;\n' + NOISE + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       vec4 wq = modelMatrix * vec4(transformed, 1.0);
-      float side = step(.5, abs(normal.z));
-      float rip = sin(wq.x * .32 + uTime * 1.6) * .28 + sin(wq.x * .9 - uTime * 2.4 + wq.y * .7) * .12 + sin(wq.y * 1.7 + uTime * 3.1) * .06;
-      transformed.z += rip * side * smoothstep(0.0, 2.0, wq.y);`).replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n vWY = (modelMatrix * vec4(transformed, 1.0)).y;');
-    sh.fragmentShader = 'uniform float uTop; uniform float uTime;\nvarying float vWY;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-      float hk = clamp(vWY / max(uTop, .5), 0.0, 1.0);
-      vec3 deep = vec3(.015, .07, .10), mid = vec3(.05, .25, .32), lit = vec3(.18, .52, .58);
-      vec3 wc = mix(deep, mid, smoothstep(0.0, .6, hk)); wc = mix(wc, lit, smoothstep(.6, 1.0, hk));
-      float streak = .5 + .5 * sin(vWY * 6.0 - uTime * 4.0 + gl_FragCoord.x * .02);
-      wc += vec3(.04, .08, .09) * streak * hk;
-      float foam = smoothstep(uTop - 1.2, uTop - .1, vWY);
-      diffuseColor.rgb = mix(wc, vec3(.85, .93, .95), foam * .85);`).replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-      totalEmissiveRadiance += vec3(.01, .05, .06) * smoothstep(.3, 1.0, clamp(vWY / max(uTop, .5), 0.0, 1.0));`);
+      // l'acqua si ammucchia verso il passaggio e scende al livello del mare allontanandosi
+      float far = smoothstep(6.0, 170.0, abs(wq.z) - uGap);
+      transformed.y = -.5 + (transformed.y + .5) * mix(1.0, .72 / (uTop + .5), far);
+      wq = modelMatrix * vec4(transformed, 1.0);
+      float side = step(.5, abs(normal.z) + abs(normal.x));
+      float hk = clamp(wq.y / max(uTop, .5), 0.0, 1.0);
+      // grandi rigonfiamenti lenti e increspature che scendono lungo la parete
+      float bulge = (wf(vec2(wq.x * .025, uTime * .05)) - .5) * 2.2 * smoothstep(.0, .5, hk);
+      float rip = sin(wq.x * .32 + uTime * 1.6) * .22 + sin(wq.x * .9 + wq.y * 1.3 + uTime * 3.2) * .1 + (wn(vec2(wq.x * .6, wq.y * .8 + uTime * 1.5)) - .5) * .35;
+      transformed.z += (bulge + rip) * step(.5, abs(normal.z)) * smoothstep(0.0, 1.5, wq.y) * sign(normal.z);
+      // cresta irregolare in cima, con un leggero labbro verso il passaggio
+      float topk = smoothstep(.35, .5, position.y);
+      float crest = (wf(vec2(wq.x * .18, uTime * .6)) - .45) * 1.6 + sin(wq.x * .7 + uTime * 2.4) * .25;
+      transformed.y += crest * topk / max(1.0, uTop) ;
+      vSide = side; vUp = step(.5, normal.y); vEnd = step(.5, abs(normal.x));`).replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n vWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = 'uniform float uTop; uniform float uTime; uniform float uGap;\nvarying vec3 vWP; varying float vSide; varying float vUp; varying float vEnd;\n' + NOISE + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      float hk = clamp(vWP.y / max(uTop, .5), 0.0, 1.0);
+      // profondità: scuro in basso, verde-azzurro traslucido in alto
+      vec3 deep = vec3(.006, .04, .06), mid = vec3(.03, .19, .25), lit = vec3(.13, .46, .50);
+      vec3 wc = mix(deep, mid, smoothstep(0.0, .55, hk)); wc = mix(wc, lit, smoothstep(.55, 1.0, hk));
+      // luce che filtra: venature mobili (caustiche)
+      vec2 cp = vec2(vWP.x * .22, vWP.y * .35 + uTime * .5);
+      float ca = abs(sin(cp.x * 3.1 + sin(cp.y * 2.3 + uTime) * 1.5) * sin(cp.y * 2.7 + sin(cp.x * 1.9 - uTime * .7)));
+      wc += vec3(.05, .16, .16) * pow(1.0 - ca, 6.0) * hk * vSide;
+      // schiuma che scende: strisce verticali che scorrono verso il basso
+      vec2 sp2 = vec2(vWP.x * .55 + (wf(vec2(vWP.y * .3, vWP.x * .1)) - .5) * 2.5, vWP.y * .28 + uTime * .75);
+      float st = wf(sp2), st2 = wf(sp2 * vec2(2.2, 1.6) + 5.3 + vec2(0., uTime * .4));
+      float streak = smoothstep(.5, .72, st * .65 + st2 * .45) * vSide;
+      streak *= (.25 + .75 * smoothstep(.1, .95, hk)) * (.55 + .45 * wn(vec2(vWP.x * .08, vWP.y * .4 + uTime * .3)));
+      // ribollio alla base e cresta bianca in cima
+      float baseF = (1.0 - smoothstep(.0, 1.2, vWP.y)) * smoothstep(.45, .7, wf(vec2(vWP.x * 1.3 + uTime * .5, vWP.y * 2.0 - uTime * 1.9))) * vSide;
+      float crestF = smoothstep(uTop - .9, uTop - .1, vWP.y) * (.65 + .35 * wf(vec2(vWP.x * .7, uTime * 2.0))) * smoothstep(1.5, 4.0, uTop);
+      float foam = clamp(max(max(streak * .75, baseF), crestF), 0.0, 1.0);
+      // faccia superiore: superficie del mare, con schiuma solo lungo il bordo del muro
+      float edgeD = abs(vWP.z) - uGap;
+      vec3 seaTop = vec3(.02, .10, .13) + vec3(.03, .06, .06) * wn(vWP.xz * .3 + uTime * .2);
+      float lip = (1.0 - smoothstep(.0, 2.5, edgeD)) * (.6 + .4 * wf(vec2(vWP.x * .6, uTime * 1.5)));
+      foam = mix(foam, lip, vUp); wc = mix(wc, seaTop, vUp);
+      // testata verso la riva: acqua scura con un filo di schiuma dove tocca la sabbia
+      foam = mix(foam, baseF * .8, vEnd); wc = mix(wc, vec3(.01, .05, .07), vEnd);
+      diffuseColor.rgb = mix(wc, vec3(.86, .93, .94), foam);
+      diffuseColor.a = mix(.9, 1.0, foam);`).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+      roughnessFactor = mix(roughnessFactor, .75, clamp(foam, 0., 1.));`).replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      totalEmissiveRadiance += vec3(.008, .045, .05) * smoothstep(.3, 1.0, hk) + vec3(.03, .035, .035) * foam;`);
   };
   const foamMat = new THREE.MeshStandardMaterial({ color: '#eef6f6', roughness: .7, transparent: true, opacity: .9, normalMap: n2 });
   const L = 1400, Wd = 900;
-  const halves = [1, -1].map(s => { const m = new THREE.Mesh(new THREE.BoxGeometry(L, 1, Wd, 560, 24, 1), wallMat); m.visible = false; scene.add(m); const f = new THREE.Mesh(new THREE.BoxGeometry(L, .35, 1.2), foamMat); f.visible = false; scene.add(f); return { m, f, s }; });
+  const halves = [1, -1].map(s => { const m = new THREE.Mesh(new THREE.BoxGeometry(L, 1, Wd, 560, 24, 60), wallMat); m.visible = false; scene.add(m); const f = new THREE.Mesh(new THREE.BoxGeometry(L, .35, 1.2), foamMat); f.visible = false; scene.add(f); return { m, f, s }; });
   const shore = new THREE.Mesh(new THREE.PlaneGeometry(3, 2000), foamMat); shore.rotation.x = -Math.PI / 2; shore.position.set(SEA_X + .8, .24, 0); scene.add(shore);
-  // spruzzi in cima alle pareti
-  const NS = 900, sp = new Float32Array(NS * 3), spr = rng(91), spd = [];
-  for (let i = 0; i < NS; i++) spd.push({ x: SEA_X + spr() * 260, s: spr() < .5 ? 1 : -1, o: spr() * 3, v: .5 + spr() });
+  // spruzzi strappati alla cresta dal vento orientale e nebbia alla base dei muri
+  const dc = document.createElement('canvas'); dc.width = dc.height = 64; { const g = dc.getContext('2d'); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.4, 'rgba(255,255,255,.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); }
+  const dotTex = new THREE.CanvasTexture(dc);
+  const NS = 2600, sp = new Float32Array(NS * 3), spr = rng(91), spd = [];
+  for (let i = 0; i < NS; i++) spd.push({ x: SEA_X + spr() * 300, s: spr() < .5 ? 1 : -1, o: spr() * 4, v: .45 + spr() * .6, h: .6 + spr() * 1.8, w: 3 + spr() * 9 });
   const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
-  const dc = document.createElement('canvas'); dc.width = dc.height = 64; { const g = dc.getContext('2d'); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); }
-  const spray = new THREE.Points(sg, new THREE.PointsMaterial({ color: '#e8f4f6', size: .5, map: new THREE.CanvasTexture(dc), transparent: true, opacity: .75, depthWrite: false }));
+  const spray = new THREE.Points(sg, new THREE.PointsMaterial({ color: '#eaf5f6', size: .55, map: dotTex, transparent: true, opacity: .7, depthWrite: false }));
   spray.visible = false; spray.frustumCulled = false; scene.add(spray);
+  const NM = 420, mp = new Float32Array(NM * 3), md = [];
+  for (let i = 0; i < NM; i++) md.push({ x: SEA_X + spr() * 300, s: spr() < .5 ? 1 : -1, o: spr() * 10, y: spr() * 1.5 });
+  const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(mp, 3));
+  const mist = new THREE.Points(mg, new THREE.PointsMaterial({ color: '#cfe2e6', size: 6, map: dotTex, transparent: true, opacity: .06, depthWrite: false }));
+  mist.visible = false; mist.frustumCulled = false; scene.add(mist);
   // fondo del mare che si asciuga al vento (Esodo 14:21: «suolo asciutto»)
   const bedTex = (u, srgb) => { const t = T(u, { srgb }).clone(); t.repeat.set(84, 8); t.needsUpdate = true; return t; };
   const bedMat = new THREE.MeshStandardMaterial({ map: bedTex('tex/sand_albedo.jpg', true), normalMap: bedTex('tex/sand_normal.jpg', false), roughness: 1, color: '#d9c7a4' });
@@ -240,22 +283,30 @@ export function makeSea(scene, T, sunDir) {
   for (let i = 0; i < NSt; i++) { const s = .4 + sr() * 1.6; tm.compose(new THREE.Vector3(SEA_X + 2 + sr() * 400, .03, (sr() - .5) * 26), new THREE.Quaternion().setFromEuler(new THREE.Euler(sr() * 3, sr() * 3, 0)), new THREE.Vector3(s, s * .5, s)); stones.setMatrixAt(i, tm); }
   stones.visible = false; stones.receiveShadow = true; scene.add(stones);
   function part(gap, top, t) {
-    const parted = gap > .2; uTop.value = top;
+    const parted = gap > .2; uTop.value = top; uWGap.value = gap;
     water.visible = !parted; shore.visible = !parted; bed.visible = stones.visible = parted; uGap.value = gap;
     for (const h of halves) {
-      h.m.visible = h.f.visible = parted;
+      h.m.visible = parted; h.f.visible = false;
       const bottom = -.5, hh = top - bottom;
       h.m.scale.y = hh; h.m.position.set(SEA_X + L / 2, bottom + hh / 2, h.s * (Wd / 2 + gap));
       h.f.position.set(SEA_X + L / 2, top, h.s * (gap + .5));
     }
-    spray.visible = parted && top > 2;
+    spray.visible = mist.visible = parted && top > 2;
     if (spray.visible) {
-      spd.forEach((d, i) => { const ph = (t * d.v + d.o) % 3; sp[i * 3] = d.x; sp[i * 3 + 1] = top + ph * 1.2 - ph * ph * .35; sp[i * 3 + 2] = d.s * (gap - ph * .5); });
+      spd.forEach((d, i) => {
+        // ogni goccia parte dalla cresta, sale, viene spinta verso ovest e dentro il passaggio, poi ricade
+        const ph = (t * d.v + d.o) % 4;
+        sp[i * 3] = d.x - ph * d.w + (ph > 0 ? 0 : 0);
+        sp[i * 3 + 1] = top + ph * d.h * 1.1 - ph * ph * .55;
+        sp[i * 3 + 2] = d.s * (gap - ph * (.6 + d.h * .3));
+      });
       sg.attributes.position.needsUpdate = true;
+      md.forEach((d, i) => { const ph = (t * .12 + d.o) % 10; mp[i * 3] = d.x - ph * 3; mp[i * 3 + 1] = .4 + d.y + ph * .05; mp[i * 3 + 2] = d.s * (gap - .8 - ph * .25); });
+      mg.attributes.position.needsUpdate = true;
     }
   }
   part(0, .22, 0);
-  return { water, part, wallMat, n2, setDry: k => { uDry.value = k; }, tick: (t, dt) => { water.material.uniforms.time.value += dt * .5; n2.offset.y = -t * .05; n2.offset.x = t * .01; } };
+  return { water, part, wallMat, n2, setDry: k => { uDry.value = k; }, tick: (t, dt) => { water.material.uniforms.time.value += dt * .5; n2.offset.y = t * .22; n2.offset.x = t * .01; } };
 }
 
 /* =====================================================================

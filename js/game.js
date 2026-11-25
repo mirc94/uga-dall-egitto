@@ -666,7 +666,11 @@ let crowdMesh = null;   // segnala che la folla è pronta
   Promise.all(CROWD_VARIANTS.map(([n]) => loadModel(n))).then(gs => {
     gs.forEach((g, vi) => {
       if (!g) return; let mesh = null; g.scene.updateMatrixWorld(true); g.scene.traverse(o => { if (o.isMesh && !mesh) mesh = o; });
-      const geo = mesh.geometry.clone(); geo.applyMatrix4(mesh.matrixWorld); geo.computeBoundingBox();
+      // i modelli compressi usano interi normalizzati: vanno convertiti in float prima di trasformarli,
+      // altrimenti le coordinate oltre ±1 vengono tagliate (teste e piedi spariscono)
+      const geo = new THREE.BufferGeometry(); geo.setIndex(mesh.geometry.index);
+      for (const [nm, at] of Object.entries(mesh.geometry.attributes)) { const a = new Float32Array(at.count * at.itemSize); for (let q = 0; q < at.count; q++) for (let c = 0; c < at.itemSize; c++) a[q * at.itemSize + c] = at.getComponent(q, c); geo.setAttribute(nm, new THREE.BufferAttribute(a, at.itemSize)); }
+      geo.applyMatrix4(mesh.matrixWorld); geo.computeBoundingBox();
       const bb = geo.boundingBox, k = CROWD_VARIANTS[vi][1] / (bb.max.y - bb.min.y);
       geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2); geo.scale(k, k, k);
       const list = crowd.filter(c => c.v === vi);
@@ -1229,7 +1233,7 @@ function stepFinale(dt) {
   } else if (t < 28.4) { // 4. il popolo cammina sull'asciutto, carrellata laterale
     look = shot(20.6, 28.4, V(front + 12, 2.2, 5), V(front + 9, 2.6, -4), V(front - 12, 1.6, 0), V(front - 10, 1.8, 0));
   } else {               // 5. all'alba la gru si alza su tutto il passaggio (Esodo 14:31)
-    look = shot(28.4, 36, V(front - 20, 6, 1), V(front - 55, 40, 7), V(front + 20, 1, 0), V(front + 70, 0, 0));
+    look = shot(28.4, 36, V(front - 20, 6, 0), V(front - 30, 32, 4), V(front + 20, 1, 0), V(front + 60, -4, 0));
   }
   camera.lookAt(look);
   if (t > 36 && !F.ended) {
