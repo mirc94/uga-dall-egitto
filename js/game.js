@@ -1194,7 +1194,7 @@ function startFinale() {
   running = false;
   for (const id of ['hud', 'where', 'pad', 'cross', 'prompt', 'lockmsg']) $(id).style.display = 'none';
   tip.style.display = 'none'; stations.forEach(s => s.g.visible = false); names.visible = false;
-  windTo(.35, 700, 6);
+  windTo(.35, 700, 6); document.body.classList.add('cine');
   if (animals) animals.recs.forEach(a => { if (a.cross) { a.ry0 = a.yaw; a.walk = false; } });
 }
 function stepFinale(dt) {
@@ -1212,28 +1212,35 @@ function stepFinale(dt) {
   placeCrowd(Math.max(0, t - 11), t > 11);
   if (animals && t > 11) for (const a of animals.recs) if (a.cross) { const [x, z, ry, mv] = walkPos(a, t - 11); a.x = x; a.z = z; a.yaw = ry; a.walk = mv; a.graze = false; animals.setInst(a, t); }
   if (raiseArm) raiseArm.rotation.x = -.3 - 2.1 * smooth(6, 8, t);
-  // camera
-  const look = new THREE.Vector3();
-  if (t < 9) {
-    const k = smooth(0, 9, t);
-    camera.position.lerpVectors(F.camFrom, new THREE.Vector3(118, 16, 34), k);
-    look.set(150, 3, 0); const fwd = new THREE.Vector3(F.camFrom.x - Math.sin(F.yaw) * 10, 1.6, F.camFrom.z - Math.cos(F.yaw) * 10);
-    look.lerpVectors(fwd, look, k);
-  } else {
-    let cx = 0, n = 0; for (let i = 0; i < crowd.length; i += 3) { if (crowd[i].x > 129) { cx += crowd[i].x; n++; } }
-    const front = n ? cx / n : 129, k = smooth(12, 22, t);
-    camera.position.set(118 + (front - 30 - 118) * k, 17 + 7 * k, 36 - 14 * k);
-    look.set(Math.max(150, front + 30), 3, 0);
+  SEA.setDry(smooth(12, 24, t));
+  // camera: cinque inquadrature legate alle didascalie
+  let cx = 0, n = 0; for (let i = 0; i < crowd.length; i += 3) { if (crowd[i].x > 129) { cx += crowd[i].x; n++; } }
+  const front = n ? cx / n : 129, V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const shot = (t0, t1, p0, p1, l0, l1) => { const k = smooth(t0, t1, t); camera.position.lerpVectors(p0, p1, k); return new THREE.Vector3().lerpVectors(l0, l1, k); };
+  let look;
+  if (t < 6.8) {        // 1. la colonna passa dietro al popolo (Esodo 14:19, 20)
+    const fwd = V(F.camFrom.x - Math.sin(F.yaw) * 10, 1.6, F.camFrom.z - Math.cos(F.yaw) * 10);
+    const k = smooth(0, 3.5, t), p = V(127, 11, -27).lerp(V(124, 12, -24), smooth(3.5, 6.8, t));
+    camera.position.lerpVectors(F.camFrom, p, k); look = fwd.lerp(V(104, 7, 3), k);
+  } else if (t < 13.6) { // 2. Mosè stende la mano sul mare (Esodo 14:21), visto da dietro e dal basso
+    look = shot(6.8, 13.6, V(125.4, 1.5, 5.6), V(124.6, 2.1, 4.2), V(150, 3, -2), V(160, 7, 0));
+  } else if (t < 20.6) { // 3. le acque formano un muro a destra e a sinistra (Esodo 14:22)
+    look = shot(13.6, 20.6, V(140, 1.4, 0), V(152, 3.2, 0), V(200, 6, 0), V(215, 9, 0));
+  } else if (t < 28.4) { // 4. il popolo cammina sull'asciutto, carrellata laterale
+    look = shot(20.6, 28.4, V(front + 12, 2.2, 5), V(front + 9, 2.6, -4), V(front - 12, 1.6, 0), V(front - 10, 1.8, 0));
+  } else {               // 5. all'alba la gru si alza su tutto il passaggio (Esodo 14:31)
+    look = shot(28.4, 36, V(front - 20, 6, 1), V(front - 55, 40, 7), V(front + 20, 1, 0), V(front + 70, 0, 0));
   }
   camera.lookAt(look);
   if (t > 36 && !F.ended) {
-    F.ended = true;
+    F.ended = true; document.body.classList.remove('cine');
     $('eTime').textContent = fmt(state.elapsed + state.penalty); $('eHints').textContent = String(state.hints);
     if (state.name) $('eText').textContent = `${state.name}, Israele vide la grande potenza di Geova e ripose fede in lui. Lo stesso Dio sostiene anche oggi chi confida in lui.`;
     openOv('ovEnd'); try { localStorage.removeItem(KEY); } catch (e) { /* facoltativo */ }
   }
 }
 $('bLook').addEventListener('click', () => closeOv('ovEnd'));
+$('bSkip').addEventListener('click', () => { if (!finale || finale.ended) return; voiceStop(); finale.capI = CAPS.length; finale.t = Math.max(finale.t, 35.9); });
 function stepWind(dt) {
   if (wind.material.opacity <= 0) return;
   const a = windGeo.attributes.position.array;

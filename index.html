@@ -37,6 +37,12 @@ button{font-family:inherit}
 #cross{position:fixed;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;pointer-events:none;display:none}
 #cross:before,#cross:after{content:"";position:absolute;background:rgba(243,233,210,.8)}
 #cross:before{left:6px;top:0;width:2px;height:14px}#cross:after{top:6px;left:0;height:2px;width:14px}
+
+.lb{position:fixed;left:0;right:0;height:0;background:#000;z-index:3;transition:height 1.2s ease;pointer-events:none}
+#lbTop{top:0}#lbBot{bottom:0}
+body.cine .lb{height:9vh}
+#bSkip{position:fixed;right:16px;bottom:calc(9vh + 12px);z-index:5;display:none;margin:0}
+body.cine #bSkip{display:block}
 #caption{position:fixed;left:50%;top:18%;transform:translateX(-50%);max-width:min(620px,calc(100vw - 32px));text-align:center;font-family:'Cinzel',serif;font-size:22px;line-height:1.35;color:#F3E9D2;text-shadow:0 2px 12px rgba(0,0,0,.8);opacity:0;transition:opacity .8s;pointer-events:none;z-index:4}
 #caption small{display:block;margin-top:6px;font-family:'Source Sans 3',sans-serif;font-size:14px;color:var(--muted)}
 #caption.show{opacity:1}
@@ -154,6 +160,7 @@ button{font-family:inherit}
 <div id="tip"></div>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="caption" aria-live="polite"></div>
+<div id="lbTop" class="lb"></div><div id="lbBot" class="lb"></div><button id="bSkip" class="listen" aria-label="Salta il finale">Salta ▶▶</button>
 
 <!-- Schermata iniziale -->
 <div class="ov open" id="ovStart" role="dialog" aria-modal="true" aria-labelledby="tStart">

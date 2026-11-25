@@ -207,9 +207,41 @@ export function makeSea(scene, T, sunDir) {
   const dc = document.createElement('canvas'); dc.width = dc.height = 64; { const g = dc.getContext('2d'); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); }
   const spray = new THREE.Points(sg, new THREE.PointsMaterial({ color: '#e8f4f6', size: .5, map: new THREE.CanvasTexture(dc), transparent: true, opacity: .75, depthWrite: false }));
   spray.visible = false; spray.frustumCulled = false; scene.add(spray);
+  // fondo del mare che si asciuga al vento (Esodo 14:21: «suolo asciutto»)
+  const bedTex = (u, srgb) => { const t = T(u, { srgb }).clone(); t.repeat.set(84, 8); t.needsUpdate = true; return t; };
+  const bedMat = new THREE.MeshStandardMaterial({ map: bedTex('tex/sand_albedo.jpg', true), normalMap: bedTex('tex/sand_normal.jpg', false), roughness: 1, color: '#d9c7a4' });
+  const uDry = { value: 0 }, uGap = { value: 14 };
+  bedMat.onBeforeCompile = sh => {
+    sh.uniforms.uDry = uDry; sh.uniforms.uGap = uGap;
+    sh.vertexShader = 'varying vec3 vBW;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n vBW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = `uniform float uDry; uniform float uGap; varying vec3 vBW;
+      float bh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float bn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f); return mix(mix(bh(i), bh(i+vec2(1,0)), f.x), mix(bh(i+vec2(0,1)), bh(i+vec2(1,1)), f.x), f.y); }
+      float bf(vec2 p){ return bn(p) * .55 + bn(p * 2.3 + 7.) * .3 + bn(p * 5.1 + 3.) * .15; }
+    ` + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      float edge = smoothstep(uGap - 3.0, uGap - .2, abs(vBW.z));
+      float wet = max(1.0 - uDry, edge * .85);
+      float n = bf(vBW.xz * .35);
+      float puddle = smoothstep(.62 + .3 * uDry, .66 + .3 * uDry, n) * (1.0 - uDry * .9);
+      float weed = smoothstep(.72, .8, bf(vBW.xz * .9 + 11.)) * (1.0 - uDry * .5);
+      vec3 dryC = diffuseColor.rgb;
+      vec3 wetC = diffuseColor.rgb * vec3(.48, .46, .42);
+      diffuseColor.rgb = mix(dryC, wetC, wet);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.12, .17, .09), weed * .7);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.05, .09, .10), puddle * .8);`).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+      roughnessFactor = mix(roughnessFactor, .28, wet);
+      roughnessFactor = mix(roughnessFactor, .03, puddle);`);
+  };
+  const bed = new THREE.Mesh(new THREE.PlaneGeometry(420, 40, 1, 1), bedMat);
+  bed.rotation.x = -Math.PI / 2; bed.position.set(SEA_X + 210 - .5, .03, 0); bed.receiveShadow = true; bed.visible = false; scene.add(bed);
+  // sassi e conchiglie sul fondo
+  const stoneMat = new THREE.MeshStandardMaterial({ color: '#8f8571', roughness: .5 });
+  const sr = rng(17), NSt = 420, stones = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(.12, 0), stoneMat, NSt), tm = new THREE.Matrix4();
+  for (let i = 0; i < NSt; i++) { const s = .4 + sr() * 1.6; tm.compose(new THREE.Vector3(SEA_X + 2 + sr() * 400, .03, (sr() - .5) * 26), new THREE.Quaternion().setFromEuler(new THREE.Euler(sr() * 3, sr() * 3, 0)), new THREE.Vector3(s, s * .5, s)); stones.setMatrixAt(i, tm); }
+  stones.visible = false; stones.receiveShadow = true; scene.add(stones);
   function part(gap, top, t) {
     const parted = gap > .2; uTop.value = top;
-    water.visible = !parted; shore.visible = !parted;
+    water.visible = !parted; shore.visible = !parted; bed.visible = stones.visible = parted; uGap.value = gap;
     for (const h of halves) {
       h.m.visible = h.f.visible = parted;
       const bottom = -.5, hh = top - bottom;
@@ -223,7 +255,7 @@ export function makeSea(scene, T, sunDir) {
     }
   }
   part(0, .22, 0);
-  return { water, part, wallMat, n2, tick: (t, dt) => { water.material.uniforms.time.value += dt * .5; n2.offset.y = -t * .05; n2.offset.x = t * .01; } };
+  return { water, part, wallMat, n2, setDry: k => { uDry.value = k; }, tick: (t, dt) => { water.material.uniforms.time.value += dt * .5; n2.offset.y = -t * .05; n2.offset.x = t * .01; } };
 }
 
 /* =====================================================================
