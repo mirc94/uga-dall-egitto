@@ -89,7 +89,7 @@ function columnMat(kind, H) {
         float lit = .55 + .45 * max(dot(normalize(vWN), normalize(uSun)), 0.);
         vec3 c = mix(vec3(.50, .49, .47), vec3(.97, .96, .93), lit * (.6 + .4 * n2));
         c *= .85 + .15 * h;
-        float al = d * ends * uK * .92;
+        float al = d * ends * uK * .6;
         gl_FragColor = vec4(c, al);`}
       }`,
   });
@@ -104,6 +104,46 @@ export function createPillar(scene, glowTexture) {
   };
   add('cloud', 6.5, 10, 2); add('cloud', 4.5, 7.5, 3); add('cloud', 8.5, 12.5, 1);
   add('fire', 3.8, 6.5, 4); add('fire', 2.2, 4.2, 5); add('fire', 5.5, 8.5, 3);
+  // sbuffi tridimensionali attorno al centro: danno corpo alla colonna di nuvola
+  const NP = 90, pr = (() => { let x = 7; return () => (x = (x * 16807) % 2147483647) / 2147483647; })();
+  const puffMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uK: { value: 0 }, uSun: { value: new THREE.Vector3(.4, .8, .3) } },
+    transparent: true, depthWrite: false, fog: false,
+    vertexShader: NOISE + `
+      uniform float uTime; varying vec3 vWN; varying vec3 vV; varying float vN; varying float vY;
+      void main(){
+        vec3 p = position;
+        // superficie bitorzoluta e viva, come un cumulo
+        float n = cf(p * 1.6 + vec3(float(gl_InstanceID) * 3.7, uTime * .15, 0.));
+        p *= .78 + n * .5; vN = n;
+        vec4 wp = modelMatrix * instanceMatrix * vec4(p, 1.0);
+        vWN = normalize(mat3(modelMatrix * instanceMatrix) * normal); vY = wp.y;
+        vV = normalize(cameraPosition - wp.xyz);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: `
+      uniform float uK; uniform vec3 uSun; varying vec3 vWN; varying vec3 vV; varying float vN; varying float vY;
+      void main(){
+        vec3 N = normalize(vWN);
+        float lit = dot(N, normalize(uSun)) * .5 + .5;
+        float sky = N.y * .5 + .5;
+        vec3 c = mix(vec3(.64, .64, .66), vec3(1.08, 1.06, 1.02), smoothstep(.1, .9, lit));
+        c = mix(c, c * vec3(.88, .92, 1.02), (1. - sky) * .35);
+        c *= .9 + vN * .2;
+        float rim = smoothstep(.0, .55, abs(dot(N, normalize(vV))));
+        float al = rim * .92 * uK * smoothstep(0., 3., vY);
+        gl_FragColor = vec4(c, al);
+      }`,
+  });
+  const puffs = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 4), puffMat, NP);
+  const pd = [];
+  for (let i = 0; i < NP; i++) {
+    const h = i / NP, y = 3 + h * 74 + pr() * 3, a = i * 2.39996 + pr() * .8;
+    const rad = 2.5 + pr() * 4.5 + h * 3.5, sz = 3.2 + pr() * 3.6 + h * 3;
+    pd.push({ y, a, rad, sz, ph: pr() * 6.28, sp: (pr() - .5) * .06 });
+  }
+  puffs.frustumCulled = false; puffs.renderOrder = 6; g.add(puffs);
+  const pm = new THREE.Matrix4(), pq = new THREE.Quaternion(), pv = new THREE.Vector3(), ps = new THREE.Vector3();
   // scintille che salgono dal fuoco
   const NE = 500, ep = new Float32Array(NE * 3), ed = [], r = Math.random;
   for (let i = 0; i < NE; i++) ed.push({ a: r() * 6.28, rad: 1 + r() * 5, sp: 4 + r() * 9, o: r() * 80, sw: r() * 6 });
@@ -119,6 +159,18 @@ export function createPillar(scene, glowTexture) {
         u.uK.value = l.kind === 'fire' ? night : 1 - night;
         if (sun) u.uSun.value.copy(sun);
         l.m.visible = u.uK.value > .01;
+      }
+      puffs.visible = night < .97;
+      if (puffs.visible) {
+        const pu = puffMat.uniforms; pu.uTime.value = t; pu.uK.value = 1 - night; if (sun) pu.uSun.value.copy(sun);
+        pd.forEach((d, i) => {
+          // ogni sbuffo gira piano attorno all'asse, sale e ricade appena, si gonfia e si sgonfia
+          const a = d.a + t * d.sp, b = 1 + Math.sin(t * .35 + d.ph) * .08;
+          pv.set(Math.cos(a) * d.rad, d.y + Math.sin(t * .25 + d.ph) * .8, Math.sin(a) * d.rad);
+          ps.set(d.sz * b, d.sz * b * .85, d.sz * b); pq.setFromAxisAngle(pv.clone().set(0, 1, 0), a);
+          puffs.setMatrixAt(i, pm.compose(pv, pq, ps));
+        });
+        puffs.instanceMatrix.needsUpdate = true;
       }
       embers.visible = night > .05; embers.material.opacity = night;
       if (embers.visible) {
