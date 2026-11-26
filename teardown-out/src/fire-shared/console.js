@@ -70,7 +70,7 @@ export function createConsole(app) {
   add(`<div class="cp mu" style="position:absolute;right:${1600 - 271}px;top:502px;font-weight:500">FRONTE</div>`);
   const cp = add(`<svg style="position:absolute;left:46px;top:526px" width="226" height="130"></svg>`);
   add(`<div style="position:absolute;left:46px;top:654px;width:226px;height:1px;background:${C.line}"></div>`);
-  add(`<div style="position:absolute;left:46px;top:661px;font-size:9.5px;color:${C.mute}">Manovelle 1·4 e 2·3 a 180° &nbsp;·&nbsp; 5 supporti</div>`);
+  add(`<div style="position:absolute;left:46px;top:661px;font-size:9.5px;color:${C.mute}">Manovelle 1·4 e 2·3 a 180° &nbsp;·&nbsp; interasse 77 mm</div>`);
 
   // ------------------------------------------------------------ transport
   add(`<div class="pn" style="left:35px;top:774px;width:259px;height:111px"></div>`);

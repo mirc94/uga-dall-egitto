@@ -1,9 +1,18 @@
 // Fiat 1.1 FIRE (1108 cm³) kinematics: an inline four with a flat 180° crank, firing order 1-3-4-2, the piston of
 // every cylinder from the exact slider-crank, valve lift over the 720° cycle (SOHC, 2 valves per cylinder), and a
 // chamber pressure model good enough to draw the indicator diagram. Engine space is millimetres: crank axis on z
-// (front = +z, timing belt side), y up. Bore 70, stroke 72, rod ~129 mm, compression 9.6:1; the bore spacing and
-// the rod length are close estimates, not factory drawings.
-export const E = {bore: 70, r: 36, rod: 129, comp: 28, deck: 194, pinZ: [114, 38, -38, -114], rodOff: 0, cr: 9.6, camH: 104};
+// (front = +z, timing belt side), y up.
+//
+// Sources for each value (engine 176B2.000, 1108 cm³, SPI):
+//   bore 70 × stroke 72 mm, compression 9.6:1, 5 main bearings, firing order 1-3-4-2, cylinder 1 at the belt end,
+//   parallel valves with bucket tappets: Enginedesk 176B2.000 data, motor-car.net FIRE sheet, es.wikipedia Motor FIRE.
+//   bore spacing 77 mm: NamuWiki "Fiat FIRE" (secondary source, not confirmed by a factory drawing).
+//   valve heads 33.1-33.3 mm (intake) and 27.8-28.1 mm (exhaust): Fiat aftersales data for the 1.2/1.4 8V FIRE,
+//   same head family; intake/exhaust assignment inferred from size.
+// STILL ESTIMATED (no source found): rod length 129, piston compression height, deck height, valve timing angles,
+// valve lift, timing belt tooth counts.
+export const E = {bore: 70, r: 36, rod: 129, comp: 28, deck: 194, pinZ: [115.5, 38.5, -38.5, -115.5], rodOff: 0, cr: 9.6, camH: 104};
+export const VALVE_D = {in: 33.2, ex: 27.95};
 export const STROKE = 2 * E.r;
 export const DISPLACEMENT = 4 * Math.PI * (E.bore / 2) ** 2 * STROKE / 1000; // cm³
 // one bank, vertical: b along the cylinder axis, p across the engine (+x exhaust side)

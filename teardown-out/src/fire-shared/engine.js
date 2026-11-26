@@ -5,13 +5,13 @@
 // a toothed timing belt (crank sprocket 20 teeth, cam pulley 40) and the accessory pulley at the front, the flywheel
 // at the back, and red overlay arrows. update(th, ops) poses everything for crank angle th (degrees).
 import * as THREE from 'three';
-import {chargeOf, CYL, E, FIRE, liftEx, liftIn, piston, pinXY, psi, PIN_PHASE, pressure, VALVE} from './kin.js';
+import {chargeOf, CYL, E, FIRE, liftEx, liftIn, piston, pinXY, psi, PIN_PHASE, pressure, VALVE, VALVE_D} from './kin.js';
 
 const V3 = THREE.Vector3;
 const D2R = Math.PI / 180;
 const DECK = E.deck;
 const CAM_Y = DECK + E.camH;
-const FRONT = 180;
+const FRONT = 184;
 const smoother = (x) => {
   const u = Math.min(1, Math.max(0, x));
   return u * u * u * (u * (u * 6 - 15) + 10);
@@ -189,16 +189,16 @@ export function buildEngine(opts = {}) {
   const block = new THREE.Group();
   root.add(block);
   const bh = bulkheadGeo(14, N(24));
-  const MAINS = [152, 76, 0, -76, -152];
+  const MAINS = [154, 77, 0, -77, -154];
   for (const z of MAINS) add(block, bh, M.black).position.z = z;
   // deck rails along the block, both sides of the bores
   for (const w of [-47, 47]) {
-    const r = add(block, new THREE.BoxGeometry(12, 14, 330), M.black);
+    const r = add(block, new THREE.BoxGeometry(12, 14, 336), M.black);
     r.position.set(w, DECK - 17, 0);
   }
-  const pan = add(block, new THREE.BoxGeometry(168, 36, 320), M.blackMatte);
+  const pan = add(block, new THREE.BoxGeometry(168, 36, 326), M.blackMatte);
   pan.position.set(0, -88, 0);
-  const rail = add(block, new THREE.BoxGeometry(182, 10, 334), M.black);
+  const rail = add(block, new THREE.BoxGeometry(182, 10, 340), M.black);
   rail.position.set(0, -70, 0);
 
   // ------------------------------------------------------------ cylinders: liner, flange, head pieces, valvetrain, plug, exhaust
@@ -219,7 +219,7 @@ export function buildEngine(opts = {}) {
     // the head: one slice of the cast head over this bore, with its valves, plug, ports and runners
     const head = new THREE.Group();
     g.add(head);
-    const cap = add(head, new THREE.BoxGeometry(128, 12, 72), M.black);
+    const cap = add(head, new THREE.BoxGeometry(128, 12, 73), M.black);
     cap.position.y = DECK + 8;
     const vblock = add(head, new THREE.BoxGeometry(56, 14, 66), M.black);
     vblock.position.y = DECK + 21;
@@ -229,8 +229,8 @@ export function buildEngine(opts = {}) {
     g.add(charge);
     // valves: in a row under the single cam, intake toward the back, exhaust toward the front
     const valves = [
-      {z: -16, kind: 'in', r: 15},
-      {z: 16, kind: 'ex', r: 12.5},
+      {z: -16, kind: 'in', r: VALVE_D.in / 2},
+      {z: 16, kind: 'ex', r: VALVE_D.ex / 2},
     ].map((v) => {
       const vg = new THREE.Group();
       head.add(vg);
@@ -396,7 +396,7 @@ export function buildEngine(opts = {}) {
   const hub = add(pulley, gear(18, 20, 17, 36, 0, 6), M.steel);
   hub.position.z = 22;
   const flywheel = new THREE.Group();
-  flywheel.position.z = -190;
+  flywheel.position.z = -194;
   root.add(flywheel);
   add(flywheel, new THREE.CylinderGeometry(124, 124, 18, N(72)), M.black).rotation.x = Math.PI / 2;
   add(flywheel, gear(110, 138, 132, 16, 0, 116), M.black);
@@ -606,7 +606,7 @@ export function buildEngine(opts = {}) {
     pulley.rotation.z = cAng;
     pulley.position.set(0, -DK, front + 34 + 70 * eCrank);
     flywheel.rotation.z = cAng;
-    flywheel.position.set(0, -DK, -190 - 70 * eCrank);
+    flywheel.position.set(0, -DK, -194 - 70 * eCrank);
     arcs.rotation.z = cAng * 0.25;
     arcs.position.set(0, -DK, front + 52 + 70 * eCrank);
 

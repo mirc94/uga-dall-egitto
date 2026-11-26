@@ -173,17 +173,17 @@ export function makeConsoleFrame(ui, st) {
     if (!solo && (cam === 'hero' || cam === 'side')) {
       callouts.push(
         {name: 'Albero a camme in testa', sub: 'METÀ VELOCITÀ DELL\'ALBERO', at: P(0, CAM, -60), label: [962, 196], w: 150, o: vis},
-        {name: 'Volano', sub: 'ACCUMULA GLI IMPULSI', at: P(100, -40, -190), label: [1168, 572], w: 124, o: vis},
-        {name: 'Cinghia dentata', sub: 'PIGNONE 20 : PULEGGIA 40', at: P(-40, CAM / 2, 180), label: [306, 704], w: 140, o: vis},
+        {name: 'Volano', sub: 'ACCUMULA GLI IMPULSI', at: P(100, -40, -194), label: [1168, 572], w: 124, o: vis},
+        {name: 'Cinghia dentata', sub: 'PIGNONE 20 : PULEGGIA 40', at: P(-40, CAM / 2, 184), label: [306, 704], w: 140, o: vis},
       );
     }
     if (solo) {
-      callouts.push({name: 'Punteria a bicchiere', sub: 'LA CAMMA SPINGE LA VALVOLA', at: P(0, E.deck + 80, cy.z - 16), label: [960, 330], w: 150, o: vis});
+      callouts.push({name: 'Punteria a bicchiere', sub: 'LA CAMMA SPINGE LA VALVOLA', at: P(0, E.deck + 80, cy.z - 16), label: [1110, 190], w: 150, o: vis});
     }
     // leaders from the panels into the engine: the rev counter to the crank, the indicator panel to the tracked bore
     const [bx, by] = bankXY(cy.bank, 0, E.deck - 40);
     const lead = live && !live.overlays.callouts ? 0 : 1;
-    callouts.push({name: '', sub: '', at: solo ? P(0, 0, cy.z) : P(0, 0, 214), label: [282, 152], w: 0, o: lead});
+    callouts.push({name: '', sub: '', at: solo ? P(0, 0, cy.z) : P(0, 0, 218), label: [282, 152], w: 0, o: lead});
     callouts.push({name: '', sub: '', at: P(bx, by, cy.z), label: [1318 - 0.01, 501], w: 0, o: 0.9 * lead * (live && !live.overlays.charts ? 0 : 1)});
     const ps = psi(cyl, th);
     ui.update({
